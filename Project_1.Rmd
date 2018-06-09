@@ -1,0 +1,101 @@
+---
+title: "Project_1_Reproducible_Research"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Part 1: taking out the NAs
+This section loads the necessary libraries in R and also reads the data from the file.
+```{r}
+library(dplyr)
+library(tidyr)
+library(cowplot)
+
+data_missing_values <- read.csv("activity.csv")
+activity <- data_missing_values[complete.cases(data_missing_values$steps),]
+```
+
+## Part 2: mean number of steps per day
+This section groups the data frame and plots the data, while also giving the mean and
+median steps per day.
+```{r}
+days_count <- group_by(activity, date)
+x <- summarize(days_count, total_steps = sum(steps))
+ggplot(x, aes(total_steps)) + geom_histogram(binwidth = 1000)
+ggsave("plot1.png", path = "./figure/", height = 5, width = 5)
+
+mean_steps_day <- mean(x$total_steps)
+median_steps_day <- median(x$total_steps)
+
+mean_steps_day
+median_steps_day
+```
+
+## Part 3: average daily activity pattern
+This section groups the data frame and plots the data, while also giving the max interval mean.
+```{r}
+average_daily <- group_by(activity, interval)
+y <- summarize(average_daily, interval_mean = mean(steps))
+ggplot(y, aes(interval, interval_mean)) + geom_line()
+ggsave("plot2.png", path = "./figure/", height = 5, width = 5)
+
+max_interval <- y$interval[which.max(y$interval_mean)]
+max_interval
+```
+
+## Part 4: inserting missing values
+This section imputes values into the data where there is NA values and then does the
+same analysis that is done in Part 2.
+```{r}
+is_NA <- is.na(data_missing_values$steps)
+rows_with_NA <- sum(is_NA)
+
+imputed <- data_missing_values
+df_NA <- imputed[is.na(imputed$steps),]
+
+map_NA <- which(is_NA)
+for (i in 1:length(df_NA$interval)) {
+  imputed[map_NA[i], 1] <- filter(y, interval == df_NA$interval[i])$interval_mean
+}
+
+days_count_imp <- group_by(imputed, date)
+z <- summarize(days_count_imp, total_steps = sum(steps))
+
+new_x <- mutate(x, "dataset" = "no-NA")
+new_z <- mutate(z, "dataset" = "imputed")
+
+new_df <- rbind(new_x, new_z)
+
+ggplot(new_df, aes(total_steps, fill = dataset)) +
+  geom_histogram(binwidth = 1000, position = "identity")
+ggsave("plot3.png", path = "./figure/", height = 5, width = 5)
+
+mean_steps_day_imp <- mean(z$total_steps)
+median_steps_day_imp <- median(z$total_steps)
+
+mean_steps_day_imp
+median_steps_day_imp
+```
+
+## Part 5: differences between the weekday and the weekend
+This section compares weekend activity to weekday activity.
+```{r}
+imputed2 <- mutate(imputed, "day_type" = as.factor("weekday"))
+levels(imputed2$day_type) <- c("weekday", "weekend")
+imputed2$date <- as.Date(imputed2$date)
+
+imputed2 <- within(imputed2, day_type[weekdays(date) == c("Saturday", "Sunday")] <- 
+                     as.factor("weekend"))
+
+days_count_imp2 <- group_by(imputed2, interval, day_type)
+compare <- summarize(days_count_imp2, interval_mean = mean(steps))
+
+ggplot(compare, aes(interval, interval_mean)) + geom_line() +
+  facet_wrap(~day_type, nrow = 2)
+ggsave("plot4.png", path = "./figure/", height = 5, width = 7)
+```
+
+
